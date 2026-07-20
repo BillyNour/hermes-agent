@@ -329,6 +329,11 @@ _MANAGED_SYSTEM_NAMES = {
     "nix": "NixOS",
     "nixos": "NixOS",
 }
+# The Nix store root. Used by detect_install_method to identify installs
+# from `nix run` / `nix profile install` (which don't set HERMES_MANAGED).
+# A module-level constant so tests can patch it without creating files
+# under the real /nix/store.
+_NIX_STORE = Path("/nix/store")
 # Values that used to signal a Homebrew-managed install. Homebrew is no
 # longer a supported distribution method, so these are explicitly ignored
 # rather than treated as a managed system — they fall through to git/unknown
@@ -467,7 +472,8 @@ def detect_install_method(project_root: Optional[Path] = None) -> str:
     # hallmark of a nix-built install — no other supported install path puts
     # code there.
     try:
-        if "/nix/store/" in str(root.resolve()):
+        resolved = root.resolve()
+        if resolved != _NIX_STORE and _NIX_STORE in resolved.parents:
             return "nixos"
     except OSError:
         pass

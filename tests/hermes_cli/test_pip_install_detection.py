@@ -163,11 +163,20 @@ def test_recommended_update_command_docker():
     assert "docker pull" in recommended_update_command_for_method("docker")
 
 
-def test_nix_store_path_detected_as_nixos(tmp_path):
+def test_nix_store_path_detected_as_nixos(tmp_path, monkeypatch):
     """A code path under /nix/store/ (nix run / nix profile install) is detected
     as 'nixos' even without HERMES_MANAGED or a .install_method stamp."""
-    fake_nix = tmp_path / "nix" / "store" / "abc123-hermes-agent-0.19.0"
+    # detect_install_method checks whether the resolved root is a descendant
+    # of _NIX_STORE (Path("/nix/store")). We can't create files under the real
+    # /nix/store, so patch the constant to point at a temp dir and create the
+    # fake install path under it.
+    fake_nix_store = tmp_path / "fake-nix-store"
+    fake_nix_store.mkdir(parents=True)
+    fake_nix = fake_nix_store / "abc123-hermes-agent-0.19.0"
     fake_nix.mkdir(parents=True)
+
+    monkeypatch.setattr("hermes_cli.config._NIX_STORE", fake_nix_store)
+
     with patch("hermes_cli.config.get_managed_system", return_value=None), \
          patch("hermes_cli.config.get_hermes_home", return_value=tmp_path):
         from hermes_cli.config import detect_install_method
