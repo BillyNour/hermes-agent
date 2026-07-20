@@ -496,7 +496,7 @@ describe('usePromptActions exec fallback error reporting', () => {
       }
 
       if (method === 'command.dispatch') {
-        throw new Error('not a quick/plugin/skill command: status')
+        throw new Error('not a quick/plugin/skill command: debug')
       }
 
       return {} as never
@@ -507,9 +507,11 @@ describe('usePromptActions exec fallback error reporting', () => {
       <Harness onReady={h => (handle = h)} onSeedState={s => seeds.push(s)} refreshSessions={async () => undefined} requestGateway={requestGateway} />
     )
 
-    await handle!.submitText('/status')
+    // /debug still goes through exec (no dedicated RPC), so it exercises the
+    // slash.exec → command.dispatch fallback + error unmasking path.
+    await handle!.submitText('/debug')
 
-    // The dispatch fallback knowing nothing about /status is routing noise;
+    // The dispatch fallback knowing nothing about /debug is routing noise;
     // the worker timeout is what actually went wrong (#44456).
     const texts = renderedSeedTexts(seeds)
     expect(texts.some(text => text.includes('slash worker timed out'))).toBe(true)
