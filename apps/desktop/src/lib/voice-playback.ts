@@ -117,9 +117,14 @@ export interface SpeechStreamSession {
  * streams PCM back while generation continues, so speech overlaps the text
  * stream (ChatGPT-style) with no per-sentence connection or synthesis gaps.
  */
-function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechStreamSession {
+function openSpeechStream(
+  wsUrl: string,
+  options: VoicePlaybackOptions,
+  generation: number
+): SpeechStreamSession {
   const ws = new WebSocket(wsUrl)
   ws.binaryType = 'arraybuffer'
+  const isCurrent = () => generation === sequence
 
   let context: AudioContext | null = null
   let streamRate = 24_000
@@ -131,6 +136,7 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
   const pendingSends: string[] = []
 
   let settle: (value: 'done' | 'fallback') => void = () => undefined
+  let stopSession: () => void = () => undefined
 
   const done = new Promise<'done' | 'fallback'>(resolve => {
     settle = value => {
@@ -139,7 +145,10 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
       }
 
       settled = true
-      currentStop = null
+
+      if (isCurrent() && currentStop === stopSession) {
+        currentStop = null
+      }
 
       try {
         ws.close()
@@ -154,6 +163,10 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
   })
 
   const send = (frame: object) => {
+    if (!isCurrent()) {
+      return
+    }
+
     const data = JSON.stringify(frame)
 
     if (ws.readyState === WebSocket.OPEN) {
@@ -165,15 +178,22 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
 
   // stopVoicePlayback() → immediate barge-in: kill the socket (the server
   // aborts synthesis on disconnect) and the audio context (cuts sound now).
-  currentStop = () => settle('done')
+  stopSession = () => settle('done')
+  currentStop = stopSession
 
   const finishWhenDrained = () => {
+    if (!isCurrent()) {
+      settle('done')
+
+      return
+    }
+
     const remainingMs = context ? Math.max(0, nextStartAt - context.currentTime) * 1_000 : 0
     window.setTimeout(() => settle('done'), remainingMs + 100)
   }
 
   const schedule = (data: ArrayBuffer) => {
-    if (!context) {
+    if (!isCurrent() || !context) {
       return
     }
 
@@ -221,10 +241,22 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
   }
 
   ws.onopen = () => {
+    if (!isCurrent()) {
+      settle('done')
+
+      return
+    }
+
     pendingSends.splice(0).forEach(data => ws.send(data))
   }
 
   ws.onmessage = event => {
+    if (!isCurrent()) {
+      settle('done')
+
+      return
+    }
+
     if (typeof event.data !== 'string') {
       schedule(event.data as ArrayBuffer)
 
@@ -260,12 +292,12 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
     // Raw deltas — the server strips markdown/emoji per *sentence*, which is
     // the only safe granularity when constructs span delta boundaries.
     append: text => {
-      if (text && !finished && !settled) {
+      if (text && isCurrent() && !finished && !settled) {
         send({ text })
       }
     },
     finish: () => {
-      if (!finished && !settled) {
+      if (isCurrent() && !finished && !settled) {
         finished = true
         send({ done: true })
       }
@@ -281,19 +313,22 @@ function openSpeechStream(wsUrl: string, options: VoicePlaybackOptions): SpeechS
  * whole-text `playSpeechText`.
  */
 export async function startSpeechStream(options: VoicePlaybackOptions): Promise<null | SpeechStreamSession> {
+  // Claim playback before credential/URL discovery. Any stop or newer playback
+  // increments the sequence, making this pending probe permanently stale.
+  stopVoicePlayback()
+  const generation = sequence
   const wsUrl = await resolveSpeakStreamUrl()
 
-  if (!wsUrl) {
+  if (!wsUrl || generation !== sequence) {
     return null
   }
 
-  stopVoicePlayback()
   setVoicePlaybackState(currentState('preparing', options))
 
-  const session = openSpeechStream(wsUrl, options)
+  const session = openSpeechStream(wsUrl, options, generation)
 
   void session.done.then(outcome => {
-    if (outcome === 'done') {
+    if (outcome === 'done' && generation === sequence) {
       setVoicePlaybackState(currentState('idle'))
     }
   })
@@ -302,8 +337,13 @@ export async function startSpeechStream(options: VoicePlaybackOptions): Promise<
 }
 
 /** One-shot playback of complete text over the streaming WS. */
-function playSpeechStream(wsUrl: string, text: string, options: VoicePlaybackOptions): Promise<'fallback' | 'played'> {
-  const session = openSpeechStream(wsUrl, options)
+function playSpeechStream(
+  wsUrl: string,
+  text: string,
+  options: VoicePlaybackOptions,
+  generation: number
+): Promise<'fallback' | 'played'> {
+  const session = openSpeechStream(wsUrl, options, generation)
   session.append(text)
   session.finish()
 
@@ -343,7 +383,10 @@ async function playSpeechDataUrl(
         audio.removeEventListener('ended', onEnded)
         audio.removeEventListener('error', onError)
         audio.removeEventListener('timeupdate', armStall)
-        currentStop = null
+
+        if (isCurrent()) {
+          currentStop = null
+        }
       }
 
       const armStall = () => {
@@ -409,7 +452,7 @@ export async function playSpeechText(text: string, options: VoicePlaybackOptions
     const streamUrl = await resolveSpeakStreamUrl()
 
     if (streamUrl && isCurrent()) {
-      const outcome = await playSpeechStream(streamUrl, speakableText, options)
+      const outcome = await playSpeechStream(streamUrl, speakableText, options, ownSequence)
 
       if (outcome === 'played') {
         if (!isCurrent()) {
@@ -428,11 +471,13 @@ export async function playSpeechText(text: string, options: VoicePlaybackOptions
 
     const played = await playSpeechDataUrl(speakableText, options, isCurrent)
 
-    if (played) {
-      setVoicePlaybackState(currentState('idle'))
+    if (!played || !isCurrent()) {
+      return false
     }
 
-    return played
+    setVoicePlaybackState(currentState('idle'))
+
+    return true
   } catch (error) {
     if (isCurrent()) {
       currentStop = null

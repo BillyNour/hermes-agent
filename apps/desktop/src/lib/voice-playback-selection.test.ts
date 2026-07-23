@@ -41,6 +41,10 @@ describe('playSelectedSpeechText', () => {
     speakText.mockReset()
     speakText.mockResolvedValue({ data_url: 'data:audio/mpeg;base64,voice' })
     vi.stubGlobal('Audio', FakeAudio)
+    Object.defineProperty(window, 'hermesDesktop', {
+      configurable: true,
+      value: undefined
+    })
   })
 
   it('uses the normal Hermes voice pipeline for only the selected text', async () => {
