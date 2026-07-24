@@ -3423,8 +3423,13 @@ class GatewaySlashCommandsMixin:
         if new_state:
             # Show a preview using current agent state if available.
             from gateway.runtime_footer import format_runtime_footer
+            _mcfg = user_config.get("model") if isinstance(user_config, dict) else None
+            _preview_provider = None
+            if isinstance(_mcfg, dict):
+                _preview_provider = _mcfg.get("provider") or None
             preview = format_runtime_footer(
                 model=_resolve_gateway_model(user_config) or None,
+                provider=_preview_provider,
                 context_tokens=0,
                 context_length=None,
                 fields=effective.get("fields") or ["model", "context_pct", "cwd"],

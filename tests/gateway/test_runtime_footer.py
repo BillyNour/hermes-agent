@@ -137,6 +137,43 @@ def test_format_footer_custom_field_order():
     assert out == "50% · gpt-5.4"
 
 
+def test_format_footer_provider_and_model():
+    out = format_runtime_footer(
+        model="grok-4.5",
+        provider="xai-oauth",
+        context_tokens=0,
+        context_length=None,
+        cwd="",
+        fields=("provider", "model"),
+    )
+    assert out == "xai-oauth · grok-4.5"
+
+
+def test_format_footer_moa_provider_uses_moa_label_and_preset_name():
+    # MoA sessions store provider=moa and model=<preset name>.
+    out = format_runtime_footer(
+        model="daily-grok",
+        provider="moa",
+        context_tokens=0,
+        context_length=None,
+        cwd="",
+        fields=("provider", "model"),
+    )
+    assert out == "MoA · daily-grok"
+
+
+def test_format_footer_provider_field_skipped_when_missing():
+    out = format_runtime_footer(
+        model="grok-4.5",
+        provider=None,
+        context_tokens=0,
+        context_length=None,
+        cwd="",
+        fields=("provider", "model"),
+    )
+    assert out == "grok-4.5"
+
+
 def test_format_footer_unknown_field_silently_ignored():
     out = format_runtime_footer(
         model="openai/gpt-5.4",
@@ -229,6 +266,26 @@ def test_build_footer_returns_rendered_when_enabled(monkeypatch, tmp_path):
     (tmp_path / "proj").mkdir(exist_ok=True)
     assert "gpt-5.4" in out
     assert "25%" in out
+
+
+def test_build_footer_includes_provider_when_configured():
+    out = build_footer_line(
+        user_config={
+            "display": {
+                "runtime_footer": {
+                    "enabled": True,
+                    "fields": ["provider", "model"],
+                }
+            }
+        },
+        platform_key="telegram",
+        model="daily-grok",
+        provider="moa",
+        context_tokens=0,
+        context_length=None,
+        cwd="",
+    )
+    assert out == "MoA · daily-grok"
 
 
 def test_build_footer_per_platform_off_suppresses():

@@ -1,8 +1,8 @@
 """Gateway runtime-metadata footer.
 
-Renders a compact footer showing runtime state (model, context %, cwd) and
-appends it to the FINAL message of an agent turn when enabled.  Off by default
-to keep replies minimal.
+Renders a compact footer showing runtime state (provider, model/MoA preset,
+context %, cwd) and appends it to the FINAL message of an agent turn when
+enabled.  Off by default to keep replies minimal.
 
 Config (``~/.hermes/config.yaml``)::
 
@@ -10,6 +10,7 @@ Config (``~/.hermes/config.yaml``)::
       runtime_footer:
         enabled: true                       # off by default
         fields: [model, context_pct, cwd]   # order shown; drop any to hide
+        # supported fields: provider, model, context_pct, cwd
 
 Per-platform overrides live under ``display.platforms.<platform>.runtime_footer``.
 Users can toggle the global setting with ``/footer on|off`` from both the CLI
@@ -21,6 +22,12 @@ the final message a user sees, not on tool-progress updates or streaming
 partials.  When streaming is on and the final text has already been delivered
 piecemeal, the footer is sent as a separate trailing message via
 ``send_trailing_footer()``.
+
+Display rules:
+- ``provider`` — raw provider id; ``moa`` is rendered as ``MoA``.
+- ``model`` — short model name. For MoA sessions the model slot is the preset
+  name (e.g. ``daily-grok``), so ``provider + model`` becomes
+  ``MoA · daily-grok``.
 """
 
 from __future__ import annotations
@@ -51,6 +58,18 @@ def _model_short(model: Optional[str]) -> str:
     if not model:
         return ""
     return model.rsplit("/", 1)[-1]
+
+
+def _provider_label(provider: Optional[str]) -> str:
+    """Human-readable provider label for the footer."""
+    if not provider:
+        return ""
+    p = str(provider).strip()
+    if not p:
+        return ""
+    if p.lower() == "moa":
+        return "MoA"
+    return p
 
 
 def resolve_footer_config(
@@ -94,6 +113,7 @@ def format_runtime_footer(
     context_tokens: int,
     context_length: Optional[int],
     cwd: Optional[str] = None,
+    provider: Optional[str] = None,
     fields: Iterable[str] = _DEFAULT_FIELDS,
 ) -> str:
     """Render the footer line, or return "" if no fields have data.
@@ -103,7 +123,11 @@ def format_runtime_footer(
     """
     parts: list[str] = []
     for field in fields:
-        if field == "model":
+        if field == "provider":
+            label = _provider_label(provider)
+            if label:
+                parts.append(label)
+        elif field == "model":
             m = _model_short(model)
             if m:
                 parts.append(m)
@@ -130,6 +154,7 @@ def build_footer_line(
     context_tokens: int,
     context_length: Optional[int],
     cwd: Optional[str] = None,
+    provider: Optional[str] = None,
 ) -> str:
     """Top-level entry point used by gateway/run.py.
 
@@ -145,5 +170,6 @@ def build_footer_line(
         context_tokens=context_tokens,
         context_length=context_length,
         cwd=cwd,
+        provider=provider,
         fields=cfg.get("fields") or _DEFAULT_FIELDS,
     )
