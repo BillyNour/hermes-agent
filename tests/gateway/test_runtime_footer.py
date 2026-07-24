@@ -149,17 +149,52 @@ def test_format_footer_provider_and_model():
     assert out == "xai-oauth · grok-4.5"
 
 
+def test_format_footer_includes_reasoning_effort():
+    out = format_runtime_footer(
+        model="grok-4.5",
+        provider="xai-oauth",
+        reasoning_effort="ultra",
+        context_tokens=0,
+        context_length=None,
+        cwd="",
+        fields=("provider", "model", "reasoning_effort"),
+    )
+    assert out == "xai-oauth · grok-4.5 · ultra"
+
+
+def test_format_footer_effort_alias_and_skips_none():
+    out = format_runtime_footer(
+        model="m",
+        reasoning_effort="none",
+        context_tokens=0,
+        context_length=None,
+        cwd="",
+        fields=("model", "effort"),
+    )
+    assert out == "m"
+    out2 = format_runtime_footer(
+        model="m",
+        reasoning_effort="HIGH",
+        context_tokens=0,
+        context_length=None,
+        cwd="",
+        fields=("model", "reasoning"),
+    )
+    assert out2 == "m · high"
+
+
 def test_format_footer_moa_provider_uses_moa_label_and_preset_name():
     # MoA sessions store provider=moa and model=<preset name>.
     out = format_runtime_footer(
         model="daily-grok",
         provider="moa",
+        reasoning_effort="high",
         context_tokens=0,
         context_length=None,
         cwd="",
-        fields=("provider", "model"),
+        fields=("provider", "model", "reasoning_effort"),
     )
-    assert out == "MoA · daily-grok"
+    assert out == "MoA · daily-grok · high"
 
 
 def test_format_footer_provider_field_skipped_when_missing():
@@ -274,18 +309,19 @@ def test_build_footer_includes_provider_when_configured():
             "display": {
                 "runtime_footer": {
                     "enabled": True,
-                    "fields": ["provider", "model"],
+                    "fields": ["provider", "model", "reasoning_effort"],
                 }
             }
         },
         platform_key="telegram",
         model="daily-grok",
         provider="moa",
+        reasoning_effort="high",
         context_tokens=0,
         context_length=None,
         cwd="",
     )
-    assert out == "MoA · daily-grok"
+    assert out == "MoA · daily-grok · high"
 
 
 def test_build_footer_per_platform_off_suppresses():

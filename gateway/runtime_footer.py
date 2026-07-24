@@ -1,8 +1,8 @@
 """Gateway runtime-metadata footer.
 
 Renders a compact footer showing runtime state (provider, model/MoA preset,
-context %, cwd) and appends it to the FINAL message of an agent turn when
-enabled.  Off by default to keep replies minimal.
+reasoning effort, context %, cwd) and appends it to the FINAL message of an
+agent turn when enabled.  Off by default to keep replies minimal.
 
 Config (``~/.hermes/config.yaml``)::
 
@@ -10,7 +10,7 @@ Config (``~/.hermes/config.yaml``)::
       runtime_footer:
         enabled: true                       # off by default
         fields: [model, context_pct, cwd]   # order shown; drop any to hide
-        # supported fields: provider, model, context_pct, cwd
+        # supported fields: provider, model, reasoning_effort, context_pct, cwd
 
 Per-platform overrides live under ``display.platforms.<platform>.runtime_footer``.
 Users can toggle the global setting with ``/footer on|off`` from both the CLI
@@ -28,6 +28,8 @@ Display rules:
 - ``model`` — short model name. For MoA sessions the model slot is the preset
   name (e.g. ``daily-grok``), so ``provider + model`` becomes
   ``MoA · daily-grok``.
+- ``reasoning_effort`` — active effort label (e.g. ``ultra``, ``high``). Omitted
+  when reasoning is disabled or unset.
 """
 
 from __future__ import annotations
@@ -72,6 +74,16 @@ def _provider_label(provider: Optional[str]) -> str:
     return p
 
 
+def _reasoning_effort_label(effort: Optional[str]) -> str:
+    """Normalize a reasoning-effort label for the footer."""
+    if effort is None:
+        return ""
+    e = str(effort).strip().lower()
+    if not e or e in {"none", "off", "false", "disabled"}:
+        return ""
+    return e
+
+
 def resolve_footer_config(
     user_config: dict[str, Any] | None,
     platform_key: str | None = None,
@@ -114,6 +126,7 @@ def format_runtime_footer(
     context_length: Optional[int],
     cwd: Optional[str] = None,
     provider: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
     fields: Iterable[str] = _DEFAULT_FIELDS,
 ) -> str:
     """Render the footer line, or return "" if no fields have data.
@@ -131,6 +144,10 @@ def format_runtime_footer(
             m = _model_short(model)
             if m:
                 parts.append(m)
+        elif field in {"reasoning_effort", "effort", "reasoning"}:
+            label = _reasoning_effort_label(reasoning_effort)
+            if label:
+                parts.append(label)
         elif field == "context_pct":
             if context_length and context_length > 0 and context_tokens >= 0:
                 pct = max(0, min(100, round((context_tokens / context_length) * 100)))
@@ -155,6 +172,7 @@ def build_footer_line(
     context_length: Optional[int],
     cwd: Optional[str] = None,
     provider: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> str:
     """Top-level entry point used by gateway/run.py.
 
@@ -171,5 +189,6 @@ def build_footer_line(
         context_length=context_length,
         cwd=cwd,
         provider=provider,
+        reasoning_effort=reasoning_effort,
         fields=cfg.get("fields") or _DEFAULT_FIELDS,
     )

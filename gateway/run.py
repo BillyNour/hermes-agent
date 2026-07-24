@@ -13952,6 +13952,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     platform_key=_platform_config_key(source.platform),
                     model=agent_result.get("model"),
                     provider=agent_result.get("provider"),
+                    reasoning_effort=agent_result.get("reasoning_effort"),
                     context_tokens=agent_result.get("last_prompt_tokens", 0) or 0,
                     context_length=agent_result.get("context_length") or None,
                     cwd=os.environ.get("TERMINAL_CWD", ""),
@@ -22062,6 +22063,14 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 _context_length = getattr(_agent.context_compressor, "context_length", 0) or 0
             _resolved_model = getattr(_agent, "model", None) if _agent else None
             _resolved_provider = getattr(_agent, "provider", None) if _agent else None
+            _resolved_reasoning_effort = None
+            if _agent is not None:
+                _rc = getattr(_agent, "reasoning_config", None)
+                if isinstance(_rc, dict):
+                    if _rc.get("enabled") is False:
+                        _resolved_reasoning_effort = "none"
+                    else:
+                        _resolved_reasoning_effort = _rc.get("effort")
 
             # Sync session_id immediately after run_conversation(). Compression
             # can rotate before a follow-up model call fails; the failure return
@@ -22191,6 +22200,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     "output_tokens": _output_toks,
                     "model": _resolved_model,
                     "provider": _resolved_provider,
+                    "reasoning_effort": _resolved_reasoning_effort,
                     "context_length": _context_length,
                 }
 
@@ -22315,6 +22325,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 "output_tokens": _output_toks,
                 "model": _resolved_model,
                 "provider": _resolved_provider,
+                "reasoning_effort": _resolved_reasoning_effort,
                 "context_length": _context_length,
                 "session_id": effective_session_id,
                 "response_previewed": result.get("response_previewed", False),

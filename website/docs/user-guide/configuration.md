@@ -1574,24 +1574,25 @@ Tool progress requires a gateway adapter that can display progress updates safel
 
 ### Runtime-metadata footer (gateway only)
 
-When `display.runtime_footer.enabled: true`, Hermes appends a small runtime-context footer to the **final** message of each gateway turn. The footer can show the provider, model (or MoA preset name), context-window percentage, and current working directory. Off by default; opt in per-gateway if your team wants every reply to include this provenance.
+When `display.runtime_footer.enabled: true`, Hermes appends a small runtime-context footer to the **final** message of each gateway turn. The footer can show the provider, model (or MoA preset name), reasoning effort, context-window percentage, and current working directory. Off by default; opt in per-gateway if your team wants every reply to include this provenance.
 
 ```yaml
 display:
   runtime_footer:
     enabled: true
-    fields: ["model", "context_pct", "cwd"]   # supported: provider, model, context_pct, cwd
+    fields: ["model", "context_pct", "cwd"]   # supported: provider, model, reasoning_effort, context_pct, cwd
 ```
 
 - `provider` — active provider id (`xai-oauth`, `openai-codex`, …). The virtual MoA provider is rendered as `MoA`.
 - `model` — short model name. On MoA sessions this is the **preset name** (e.g. `daily-grok`), so `provider` + `model` becomes `MoA · daily-grok`.
+- `reasoning_effort` — active effort label (`ultra`, `high`, …). Omitted when reasoning is disabled/unset. Aliases: `effort`, `reasoning`.
 
 The `/footer` slash command toggles this at runtime in any session.
 
 Example footer appended to a Telegram/Discord/Slack reply:
 
 ```
-xai-oauth · grok-4.5
+xai-oauth · grok-4.5 · ultra
 ```
 
 Only the **final** message of a turn gets the footer; interim updates stay clean.
