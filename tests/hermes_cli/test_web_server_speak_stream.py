@@ -64,9 +64,9 @@ def test_rejects_bad_token(stream_client):
 
 
 def test_fallback_frame_when_no_streaming_provider(stream_client, monkeypatch):
-    _patch_provider(monkeypatch, None)
+    _patch_provider(monkeypatch, None, cap=1000)
     with stream_client.websocket_connect(_url()) as conn:
-        assert conn.receive_json() == {"type": "fallback"}
+        assert conn.receive_json() == {"type": "fallback", "max_text_length": 1000}
 
 
 def test_streams_pcm_frames_then_end(stream_client, monkeypatch):

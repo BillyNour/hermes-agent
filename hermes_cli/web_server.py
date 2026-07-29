@@ -4491,8 +4491,9 @@ async def speak_stream_ws(ws: "WebSocket") -> None:
                ``{"stop": true}`` or disconnect = barge-in
       server → ``{"type": "start", "sample_rate": N, "channels": 1}``,
                binary PCM frames, then ``{"type": "end"}``
-      server → ``{"type": "fallback"}`` when the configured provider has no
-               chunked API — the client uses the POST endpoint instead.
+      server → ``{"type": "fallback", "max_text_length": N}`` when the
+               configured provider has no chunked API — the client uses the
+               POST endpoint instead and keeps every request within its cap.
     """
     if not _ws_auth_ok(ws):
         await ws.close(code=4401)
@@ -4517,7 +4518,7 @@ async def speak_stream_ws(ws: "WebSocket") -> None:
         with _config_profile_scope(profile):
             cfg = _load_tts_config()
             streamer = resolve_streaming_provider(cfg)
-            cap = _resolve_max_text_length(_get_provider(cfg), cfg) if streamer else 0
+            cap = _resolve_max_text_length(_get_provider(cfg), cfg)
         return streamer, cap
 
     try:
@@ -4527,7 +4528,7 @@ async def speak_stream_ws(ws: "WebSocket") -> None:
         streamer, cap = None, 0
     if streamer is None:
         with contextlib.suppress(Exception):
-            await ws.send_json({"type": "fallback"})
+            await ws.send_json({"type": "fallback", "max_text_length": cap})
             await ws.close()
         return
 
