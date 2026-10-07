@@ -54,9 +54,6 @@ const withActive = (values: readonly string[], active: string): readonly string[
 const firstPresetName = (config: MoaConfigResponse): string =>
   (getOwnMoaPreset(config, config.default_preset) && config.default_preset) || Object.keys(config.presets)[0] || ''
 
-const ownEnabledMoaConfig = (config: MoaConfigResponse): boolean =>
-  Object.prototype.hasOwnProperty.call(config, 'enabled') && config.enabled === true
-
 const ownEnabledMoaPreset = (config: MoaConfigResponse, name: string): boolean =>
   getOwnMoaPreset(config, name)?.enabled === true
 
@@ -102,9 +99,7 @@ const editingActiveProfile = (profile?: string) =>
   profile === undefined || normalizeProfileKey(profile) === normalizeProfileKey($activeGatewayProfile.get())
 
 const activationReady = (draft: MoaConfigResponse, saved: MoaConfigResponse, name: string) =>
-  [draft, saved].every(
-    config => moaConfigComplete(config) && ownEnabledMoaConfig(config) && ownEnabledMoaPreset(config, name)
-  )
+  [draft, saved].every(config => moaConfigComplete(config) && ownEnabledMoaPreset(config, name))
 
 function useMoaPresetStudio({ config, onUseMoaPreset, providers, scopeProfile }: MoaPresetStudioProps) {
   const { t } = useI18n()
@@ -344,7 +339,9 @@ function useMoaPresetStudio({ config, onUseMoaPreset, providers, scopeProfile }:
         return false
       }
 
-      if (!ownEnabledMoaConfig(fresh) || !ownEnabledMoaPreset(fresh, name)) {
+      // Top-level enabled is the default preset's compatibility view, not a
+      // global switch. Only the selected preset authorizes this activation.
+      if (!moaConfigComplete(fresh) || !ownEnabledMoaPreset(fresh, name)) {
         return false
       }
 

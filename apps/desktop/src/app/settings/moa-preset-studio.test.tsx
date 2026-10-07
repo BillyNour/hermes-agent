@@ -383,18 +383,20 @@ describe('MoaPresetStudio activation', () => {
     expect(onUseMoaPreset).not.toHaveBeenCalled()
   })
 
-  it('does not activate while top-level MoA is disabled', () => {
+  it('activates an enabled selected preset when the default preset is disabled', async () => {
     const config = configFixture()
-    config.enabled = false
-    const onUseMoaPreset = vi.fn()
+    config.presets.other = { ...config.presets.default, enabled: true }
+    config.presets.default.enabled = false
+    config.enabled = false // flattened compatibility view of the default, not a global master switch
+    getMoaModels.mockResolvedValue(config)
+    const onUseMoaPreset = vi.fn(() => true)
     renderStudio(config, onUseMoaPreset)
-
+    fireEvent.click(screen.getByRole('combobox', { name: 'Preset' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'other' }))
     const usePreset = screen.getByRole('button', { name: 'Use in this chat' }) as HTMLButtonElement
-    expect(usePreset.disabled).toBe(true)
-
+    expect(usePreset.disabled).toBe(false)
     fireEvent.click(usePreset)
-    expect(getMoaModels).not.toHaveBeenCalled()
-    expect(onUseMoaPreset).not.toHaveBeenCalled()
+    await waitFor(() => expect(onUseMoaPreset).toHaveBeenCalledWith('other'))
   })
 
   it('fails closed on a transient fresh GET error and permits a retry', async () => {
@@ -421,30 +423,10 @@ describe('MoaPresetStudio activation', () => {
     {
       fresh: () => {
         const config = configFixture()
-        config.enabled = false
-
+        config.presets.default.reference_models = []
         return config
       },
-      label: 'top-level disabled state'
-    },
-    {
-      fresh: () => {
-        const config = configFixture()
-        Reflect.deleteProperty(config, 'enabled')
-
-        return config
-      },
-      label: 'missing top-level enabled state'
-    },
-    {
-      fresh: () => {
-        const config = configFixture()
-        Reflect.deleteProperty(config, 'enabled')
-        Object.setPrototypeOf(config, { enabled: true })
-
-        return config
-      },
-      label: 'inherited top-level enabled state'
+      label: 'incomplete selected preset'
     },
     {
       fresh: () => {
